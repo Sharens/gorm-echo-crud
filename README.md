@@ -36,3 +36,16 @@ Pakiety zostaną pobrane automatycznie przy pierwszym budowaniu lub uruchomieniu
 
 3.  **Dostęp do aplikacji:**
     Po pomyślnym uruchomieniu, serwer Echo nasłuchuje na określonym porcie pod adresem: http://localhost:1323
+
+## Budowanie obrazu Docker
+
+1.  **Budowanie obrazu Dockerowego**
+    ```
+    docker build -t gorm_echo_crud .
+    ```
+
+2.  **Odpalanie aplikacji z obrazu na port 1323**
+    ```
+    docker run -p 1323:1323 gorm_echo_crud:latest 
+    ```
+
