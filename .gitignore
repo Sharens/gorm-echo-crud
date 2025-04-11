@@ -1,0 +1,37 @@
+# Katalogi zależności (jeśli nie wersjonujesz katalogu vendor)
+vendor/
+pkg/
+
+# Pliki tymczasowe Go
+*.test
+*.prof
+*.out
+*.cover
+
+# Pliki logów
+*.log
+
+# Pliki konfiguracyjne środowiska
+.env
+.env.*
+!/.env.example
+
+# Pliki baz danych
+*.db
+*.db-journal
+*.sqlite
+*.sqlite3
+
+# Pliki systemowe
+.DS_Store
+Thumbs.db
+
+# Pliki edytorów i IDE
+.idea/
+.vscode/
+*.swp
+*~
+*.bak
+
+# Pliki specyficzne dla narzędzi Go
+__debug_bin
