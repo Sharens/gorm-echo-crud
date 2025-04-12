@@ -7,12 +7,15 @@ RUN go mod download
 
 COPY . .
 
-RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o /build/run .
+RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-w -s" -o /gorm-echo-crud .
 
 FROM alpine:latest
 
 WORKDIR /app
-COPY --from=builder /build/run .
+
+COPY --from=builder /build/view ./view
+COPY --from=builder /gorm-echo-crud /app/gorm-echo-crud
+
 EXPOSE 1323
 
-CMD ["./run"]
+CMD ["/app/gorm-echo-crud"]
