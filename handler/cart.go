@@ -16,12 +16,10 @@ type CartHandler struct {
 
 func (h *CartHandler) CreateCart(c echo.Context) error {
 	cart := model.Cart{}
-
 	result := h.DB.Create(&cart)
 	if result.Error != nil {
 		return echo.NewHTTPError(http.StatusInternalServerError, "Could not create cart: "+result.Error.Error())
 	}
-
 	return c.JSON(http.StatusCreated, cart)
 }
 
@@ -34,7 +32,7 @@ func (h *CartHandler) GetCart(c echo.Context) error {
 
 	var cart model.Cart
 
-	result := h.DB.Preload("CartItems.Product").First(&cart, uint(cartID))
+	result := h.DB.Scopes(model.CartWithDetails).First(&cart, uint(cartID))
 
 	if result.Error != nil {
 		if errors.Is(result.Error, gorm.ErrRecordNotFound) {
@@ -69,25 +67,15 @@ func (h *CartHandler) AddItemToCart(c echo.Context) error {
 
 	var cart model.Cart
 	if err := h.DB.First(&cart, uint(cartID)).Error; err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return echo.NewHTTPError(http.StatusNotFound, "Cart not found")
-		}
-		return echo.NewHTTPError(http.StatusInternalServerError, "Database error checking cart: "+err.Error())
 	}
-
 	var product model.Product
 	if err := h.DB.First(&product, req.ProductID).Error; err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return echo.NewHTTPError(http.StatusNotFound, "Product not found")
-		}
-		return echo.NewHTTPError(http.StatusInternalServerError, "Database error checking product: "+err.Error())
 	}
 
 	var existingItem model.CartItem
-	err = h.DB.Where("cart_id = ? AND product_id = ?", cartID, req.ProductID).First(&existingItem).Error
+	err = h.DB.Scopes(model.CartItemForCart(uint(cartID))).Where("product_id = ?", req.ProductID).First(&existingItem).Error
 
 	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
-
 		return echo.NewHTTPError(http.StatusInternalServerError, "Database error checking existing item: "+err.Error())
 	}
 
@@ -96,38 +84,28 @@ func (h *CartHandler) AddItemToCart(c echo.Context) error {
 
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 
-		newItem := model.CartItem{
-			CartID:    uint(cartID),
-			ProductID: req.ProductID,
-			Quantity:  req.Quantity,
-		}
+		newItem := model.CartItem{CartID: uint(cartID), ProductID: req.ProductID, Quantity: req.Quantity}
 		result := h.DB.Create(&newItem)
 		if result.Error != nil {
-			return echo.NewHTTPError(http.StatusInternalServerError, "Could not add item to cart: "+result.Error.Error())
 		}
 		itemToReturn = newItem
 		httpStatus = http.StatusCreated
 	} else {
 
 		existingItem.Quantity += req.Quantity
-
 		if existingItem.Quantity <= 0 {
-
 			delResult := h.DB.Delete(&existingItem)
 			if delResult.Error != nil {
-				return echo.NewHTTPError(http.StatusInternalServerError, "Could not remove item with zero quantity: "+delResult.Error.Error())
 			}
 			return c.NoContent(http.StatusNoContent)
 		}
-
 		result := h.DB.Save(&existingItem)
 		if result.Error != nil {
-			return echo.NewHTTPError(http.StatusInternalServerError, "Could not update item quantity: "+result.Error.Error())
 		}
 		itemToReturn = existingItem
 	}
 
-	h.DB.Preload("Product").First(&itemToReturn, itemToReturn.ID)
+	h.DB.Scopes(model.CartItemWithProduct).First(&itemToReturn, itemToReturn.ID)
 
 	return c.JSON(httpStatus, itemToReturn)
 }
@@ -136,23 +114,18 @@ func (h *CartHandler) RemoveItemFromCart(c echo.Context) error {
 	cartIDStr := c.Param("cart_id")
 	cartID, err := strconv.ParseUint(cartIDStr, 10, 32)
 	if err != nil || cartID == 0 {
-		return echo.NewHTTPError(http.StatusBadRequest, "Invalid Cart ID format")
 	}
 
 	itemIDStr := c.Param("item_id")
 	itemID, err := strconv.ParseUint(itemIDStr, 10, 32)
 	if err != nil || itemID == 0 {
-		return echo.NewHTTPError(http.StatusBadRequest, "Invalid Cart Item ID format")
 	}
 
-	result := h.DB.Where("cart_id = ?", uint(cartID)).Delete(&model.CartItem{}, uint(itemID))
+	result := h.DB.Scopes(model.CartItemForCart(uint(cartID))).Delete(&model.CartItem{}, uint(itemID))
 
 	if result.Error != nil {
-		return echo.NewHTTPError(http.StatusInternalServerError, "Could not remove item from cart: "+result.Error.Error())
 	}
-
 	if result.RowsAffected == 0 {
-
 		return echo.NewHTTPError(http.StatusNotFound, "Cart item not found in the specified cart")
 	}
 
@@ -163,13 +136,11 @@ func (h *CartHandler) DeleteCart(c echo.Context) error {
 	cartIDStr := c.Param("cart_id")
 	cartID, err := strconv.ParseUint(cartIDStr, 10, 32)
 	if err != nil || cartID == 0 {
-		return echo.NewHTTPError(http.StatusBadRequest, "Invalid Cart ID format")
 	}
 
 	err = h.DB.Transaction(func(tx *gorm.DB) error {
 
-		if err := tx.Where("cart_id = ?", uint(cartID)).Delete(&model.CartItem{}).Error; err != nil {
-
+		if err := tx.Scopes(model.CartItemForCart(uint(cartID))).Delete(&model.CartItem{}).Error; err != nil {
 			return err
 		}
 
@@ -177,9 +148,7 @@ func (h *CartHandler) DeleteCart(c echo.Context) error {
 		if result.Error != nil {
 			return result.Error
 		}
-
 		if result.RowsAffected == 0 {
-
 			return gorm.ErrRecordNotFound
 		}
 
