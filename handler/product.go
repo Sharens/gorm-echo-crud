@@ -1,21 +1,20 @@
 package handler
 
 import (
+	"errors"
 	"gorm-echo-crud/model"
 	"net/http"
 	"strconv"
-	"sync"
 
 	"github.com/labstack/echo/v4"
+	"gorm.io/gorm"
 )
 
-var (
-	products   = make(map[int]*model.Product)
-	nextProdID = 1
-	mu         sync.Mutex
-)
+type ProductHandler struct {
+	DB *gorm.DB
+}
 
-func CreateProduct(c echo.Context) error {
+func (h *ProductHandler) CreateProduct(c echo.Context) error {
 	prod := new(model.Product)
 	if err := c.Bind(prod); err != nil {
 		return echo.NewHTTPError(http.StatusBadRequest, "Invalid input: "+err.Error())
@@ -25,93 +24,101 @@ func CreateProduct(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusBadRequest, "Invalid input: Name cannot be empty and Price must be positive")
 	}
 
-	mu.Lock()
-	prod.ID = nextProdID
-	products[prod.ID] = prod
-	nextProdID++
-	mu.Unlock()
+	result := h.DB.Create(&prod)
+	if result.Error != nil {
+
+		return echo.NewHTTPError(http.StatusInternalServerError, "Could not create product: "+result.Error.Error())
+	}
 
 	return c.JSON(http.StatusCreated, prod)
 }
 
-func GetProducts(c echo.Context) error {
-	mu.Lock()
-	defer mu.Unlock()
+func (h *ProductHandler) GetProducts(c echo.Context) error {
+	var products []model.Product
 
-	productList := make([]*model.Product, 0, len(products))
-	for _, prod := range products {
-		productList = append(productList, prod)
+	result := h.DB.Find(&products)
+	if result.Error != nil {
+		return echo.NewHTTPError(http.StatusInternalServerError, "Could not retrieve products: "+result.Error.Error())
 	}
 
-	return c.JSON(http.StatusOK, productList)
+	return c.JSON(http.StatusOK, products)
 }
 
-func GetProduct(c echo.Context) error {
+func (h *ProductHandler) GetProduct(c echo.Context) error {
 	idStr := c.Param("id")
+
 	id, err := strconv.Atoi(idStr)
-	if err != nil {
+	if err != nil || id <= 0 {
 		return echo.NewHTTPError(http.StatusBadRequest, "Invalid ID format")
 	}
 
-	mu.Lock()
-	prod, exists := products[id]
-	mu.Unlock()
+	var product model.Product
 
-	if !exists {
-		return echo.NewHTTPError(http.StatusNotFound, "Product not found")
+	result := h.DB.First(&product, id)
+
+	if result.Error != nil {
+		if errors.Is(result.Error, gorm.ErrRecordNotFound) {
+			return echo.NewHTTPError(http.StatusNotFound, "Product not found")
+		}
+		return echo.NewHTTPError(http.StatusInternalServerError, "Database error: "+result.Error.Error())
 	}
 
-	return c.JSON(http.StatusOK, prod)
+	return c.JSON(http.StatusOK, product)
 }
 
-func UpdateProduct(c echo.Context) error {
+func (h *ProductHandler) UpdateProduct(c echo.Context) error {
 	idStr := c.Param("id")
 	id, err := strconv.Atoi(idStr)
-	if err != nil {
+	if err != nil || id <= 0 {
 		return echo.NewHTTPError(http.StatusBadRequest, "Invalid ID format")
 	}
 
-	mu.Lock()
-	existingProd, exists := products[id]
-	if !exists {
-		mu.Unlock()
-		return echo.NewHTTPError(http.StatusNotFound, "Product not found")
+	var existingProduct model.Product
+	findResult := h.DB.First(&existingProduct, id)
+	if findResult.Error != nil {
+		if errors.Is(findResult.Error, gorm.ErrRecordNotFound) {
+			return echo.NewHTTPError(http.StatusNotFound, "Product not found")
+		}
+		return echo.NewHTTPError(http.StatusInternalServerError, "Database error: "+findResult.Error.Error())
 	}
-	mu.Unlock()
 
-	updatedProdData := new(model.Product)
-	if err := c.Bind(updatedProdData); err != nil {
+	updatedData := new(model.Product)
+	if err := c.Bind(updatedData); err != nil {
 		return echo.NewHTTPError(http.StatusBadRequest, "Invalid input: "+err.Error())
 	}
 
-	if updatedProdData.Name == "" || updatedProdData.Price <= 0 {
+	if updatedData.Name == "" || updatedData.Price <= 0 {
 		return echo.NewHTTPError(http.StatusBadRequest, "Invalid input: Name cannot be empty and Price must be positive")
 	}
 
-	mu.Lock()
-	existingProd.Name = updatedProdData.Name
-	existingProd.Price = updatedProdData.Price
+	existingProduct.Name = updatedData.Name
+	existingProduct.Price = updatedData.Price
 
-	mu.Unlock()
+	saveResult := h.DB.Save(&existingProduct)
+	if saveResult.Error != nil {
+		return echo.NewHTTPError(http.StatusInternalServerError, "Could not update product: "+saveResult.Error.Error())
+	}
 
-	return c.JSON(http.StatusOK, existingProd)
+	return c.JSON(http.StatusOK, existingProduct)
 }
 
-func DeleteProduct(c echo.Context) error {
+func (h *ProductHandler) DeleteProduct(c echo.Context) error {
 	idStr := c.Param("id")
 	id, err := strconv.Atoi(idStr)
-	if err != nil {
+	if err != nil || id <= 0 {
 		return echo.NewHTTPError(http.StatusBadRequest, "Invalid ID format")
 	}
 
-	mu.Lock()
-	_, exists := products[id]
-	if !exists {
-		mu.Unlock()
-		return echo.NewHTTPError(http.StatusNotFound, "Product not found")
+	result := h.DB.Delete(&model.Product{}, id)
+
+	if result.Error != nil {
+		return echo.NewHTTPError(http.StatusInternalServerError, "Could not delete product: "+result.Error.Error())
 	}
-	delete(products, id)
-	mu.Unlock()
+
+	if result.RowsAffected == 0 {
+
+		return echo.NewHTTPError(http.StatusNotFound, "Product not found or already deleted")
+	}
 
 	return c.NoContent(http.StatusNoContent)
 }
