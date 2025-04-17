@@ -16,7 +16,6 @@ import (
 	"gorm.io/gorm"
 )
 
-//go:embed view/* view/products/*
 var templateFiles embed.FS
 
 type TemplateRegistry struct {
@@ -30,12 +29,12 @@ func (t *TemplateRegistry) Render(w io.Writer, name string, data interface{}, c 
 func main() {
 	e := echo.New()
 
-	db, err := gorm.Open(sqlite.Open("products.db"), &gorm.Config{})
+	db, err := gorm.Open(sqlite.Open("store.db"), &gorm.Config{})
 	if err != nil {
 		e.Logger.Fatal("Failed to connect database: ", err)
 	}
 
-	err = db.AutoMigrate(&model.Product{})
+	err = db.AutoMigrate(&model.Product{}, &model.Cart{}, &model.CartItem{})
 	if err != nil {
 		e.Logger.Fatal("Failed to migrate database: ", err)
 	}
@@ -57,24 +56,15 @@ func main() {
 				e.Logger.Errorf("Error parsing embedded template %s: %v", path, parseErr)
 				return parseErr
 			}
-			e.Logger.Infof("Parsed embedded template: %s", path)
+
 		}
 		return nil
 	})
 	if err != nil {
 		e.Logger.Fatalf("Error walking/parsing embedded templates: %v", err)
 	}
-	e.Logger.Info("Final Parsed Template Names (after embed):")
-	for _, t := range templates.Templates() {
-		if t.Name() != "" && t.Name() != "." && !strings.HasSuffix(t.Name(), ".html") {
-			e.Logger.Infof("  - %s", t.Name())
-		} else if strings.HasSuffix(t.Name(), ".html") {
-			e.Logger.Infof("  - %s (likely filename used as name)", t.Name())
-		}
-	}
-	e.Renderer = &TemplateRegistry{
-		templates: templates,
-	}
+
+	e.Renderer = &TemplateRegistry{templates: templates}
 
 	e.Use(middleware.Logger())
 	e.Use(middleware.Recover())
@@ -84,13 +74,10 @@ func main() {
 	}))
 
 	productHandler := &handler.ProductHandler{DB: db}
+	cartHandler := &handler.CartHandler{DB: db}
 
-	e.GET("/", func(c echo.Context) error {
-		return c.Render(http.StatusOK, "index.html", nil)
-	})
-	e.GET("/test-ui", func(c echo.Context) error {
-		return c.Render(http.StatusOK, "test-ui.html", nil)
-	})
+	e.GET("/", func(c echo.Context) error { return c.Render(http.StatusOK, "index.html", nil) })
+	e.GET("/test-ui", func(c echo.Context) error { return c.Render(http.StatusOK, "test-ui.html", nil) })
 
 	productGroup := e.Group("/products")
 	productGroup.POST("", productHandler.CreateProduct)
@@ -98,6 +85,14 @@ func main() {
 	productGroup.GET("/:id", productHandler.GetProduct)
 	productGroup.PUT("/:id", productHandler.UpdateProduct)
 	productGroup.DELETE("/:id", productHandler.DeleteProduct)
+
+	cartGroup := e.Group("/cart")
+	cartGroup.POST("", cartHandler.CreateCart)
+	cartGroup.GET("/:cart_id", cartHandler.GetCart)
+	cartGroup.DELETE("/:cart_id", cartHandler.DeleteCart)
+	cartGroup.POST("/:cart_id/items", cartHandler.AddItemToCart)
+
+	cartGroup.DELETE("/:cart_id/items/:item_id", cartHandler.RemoveItemFromCart)
 
 	e.Logger.Info("Starting server on http://localhost:1323")
 	e.Logger.Fatal(e.Start(":1323"))
