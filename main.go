@@ -34,7 +34,7 @@ func main() {
 		e.Logger.Fatal("Failed to connect database: ", err)
 	}
 
-	err = db.AutoMigrate(&model.Product{}, &model.Cart{}, &model.CartItem{})
+	err = db.AutoMigrate(&model.Product{}, &model.Cart{}, &model.CartItem{}, &model.Category{})
 	if err != nil {
 		e.Logger.Fatal("Failed to migrate database: ", err)
 	}
@@ -56,14 +56,12 @@ func main() {
 				e.Logger.Errorf("Error parsing embedded template %s: %v", path, parseErr)
 				return parseErr
 			}
-
 		}
 		return nil
 	})
 	if err != nil {
 		e.Logger.Fatalf("Error walking/parsing embedded templates: %v", err)
 	}
-
 	e.Renderer = &TemplateRegistry{templates: templates}
 
 	e.Use(middleware.Logger())
@@ -75,6 +73,7 @@ func main() {
 
 	productHandler := &handler.ProductHandler{DB: db}
 	cartHandler := &handler.CartHandler{DB: db}
+	categoryHandler := &handler.CategoryHandler{DB: db}
 
 	e.GET("/", func(c echo.Context) error { return c.Render(http.StatusOK, "index.html", nil) })
 	e.GET("/test-ui", func(c echo.Context) error { return c.Render(http.StatusOK, "test-ui.html", nil) })
@@ -91,8 +90,14 @@ func main() {
 	cartGroup.GET("/:cart_id", cartHandler.GetCart)
 	cartGroup.DELETE("/:cart_id", cartHandler.DeleteCart)
 	cartGroup.POST("/:cart_id/items", cartHandler.AddItemToCart)
-
 	cartGroup.DELETE("/:cart_id/items/:item_id", cartHandler.RemoveItemFromCart)
+
+	categoryGroup := e.Group("/categories")
+	categoryGroup.POST("", categoryHandler.CreateCategory)
+	categoryGroup.GET("", categoryHandler.GetCategories)
+	categoryGroup.GET("/:id", categoryHandler.GetCategory)
+	categoryGroup.PUT("/:id", categoryHandler.UpdateCategory)
+	categoryGroup.DELETE("/:id", categoryHandler.DeleteCategory)
 
 	e.Logger.Info("Starting server on http://localhost:1323")
 	e.Logger.Fatal(e.Start(":1323"))
