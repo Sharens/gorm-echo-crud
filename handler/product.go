@@ -1,46 +1,117 @@
 package handler
 
 import (
+	"gorm-echo-crud/model"
 	"net/http"
 	"strconv"
+	"sync"
 
 	"github.com/labstack/echo/v4"
 )
 
-var productList = []string{"laptop", "komputer", "mikrofon"}
+var (
+	products   = make(map[int]*model.Product)
+	nextProdID = 1
+	mu         sync.Mutex
+)
 
-func GetProductList() []string {
-	return productList
+func CreateProduct(c echo.Context) error {
+	prod := new(model.Product)
+	if err := c.Bind(prod); err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, "Invalid input: "+err.Error())
+	}
+
+	if prod.Name == "" || prod.Price <= 0 {
+		return echo.NewHTTPError(http.StatusBadRequest, "Invalid input: Name cannot be empty and Price must be positive")
+	}
+
+	mu.Lock()
+	prod.ID = nextProdID
+	products[prod.ID] = prod
+	nextProdID++
+	mu.Unlock()
+
+	return c.JSON(http.StatusCreated, prod)
+}
+
+func GetProducts(c echo.Context) error {
+	mu.Lock()
+	defer mu.Unlock()
+
+	productList := make([]*model.Product, 0, len(products))
+	for _, prod := range products {
+		productList = append(productList, prod)
+	}
+
+	return c.JSON(http.StatusOK, productList)
 }
 
 func GetProduct(c echo.Context) error {
 	idStr := c.Param("id")
-	idInt, err := strconv.Atoi(idStr)
-
+	id, err := strconv.Atoi(idStr)
 	if err != nil {
-		return c.String(http.StatusBadRequest, "Nieprawidłowy format ID: "+idStr)
+		return echo.NewHTTPError(http.StatusBadRequest, "Invalid ID format")
 	}
 
-	return c.String(http.StatusOK, productList[idInt-1])
+	mu.Lock()
+	prod, exists := products[id]
+	mu.Unlock()
+
+	if !exists {
+		return echo.NewHTTPError(http.StatusNotFound, "Product not found")
+	}
+
+	return c.JSON(http.StatusOK, prod)
 }
 
-func AddProduct(c echo.Context) error {
-	product_name := c.FormValue("product_name")
+func UpdateProduct(c echo.Context) error {
+	idStr := c.Param("id")
+	id, err := strconv.Atoi(idStr)
+	if err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, "Invalid ID format")
+	}
 
-	return c.String(http.StatusOK, "product_name:"+product_name)
+	mu.Lock()
+	existingProd, exists := products[id]
+	if !exists {
+		mu.Unlock()
+		return echo.NewHTTPError(http.StatusNotFound, "Product not found")
+	}
+	mu.Unlock()
+
+	updatedProdData := new(model.Product)
+	if err := c.Bind(updatedProdData); err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, "Invalid input: "+err.Error())
+	}
+
+	if updatedProdData.Name == "" || updatedProdData.Price <= 0 {
+		return echo.NewHTTPError(http.StatusBadRequest, "Invalid input: Name cannot be empty and Price must be positive")
+	}
+
+	mu.Lock()
+	existingProd.Name = updatedProdData.Name
+	existingProd.Price = updatedProdData.Price
+
+	mu.Unlock()
+
+	return c.JSON(http.StatusOK, existingProd)
 }
 
-// func (h *Handler) GetArticle(c echo.Context) error {
-// 	slug := c.Param("slug")
-// 	a, err := h.articleStore.GetBySlug(slug)
+func DeleteProduct(c echo.Context) error {
+	idStr := c.Param("id")
+	id, err := strconv.Atoi(idStr)
+	if err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, "Invalid ID format")
+	}
 
-// 	if err != nil {
-// 		return c.JSON(http.StatusInternalServerError, utils.NewError(err))
-// 	}
+	mu.Lock()
+	_, exists := products[id]
+	if !exists {
+		mu.Unlock()
+		return echo.NewHTTPError(http.StatusNotFound, "Product not found")
+	}
+	delete(products, id)
+	mu.Unlock()
 
-// 	if a == nil {
-// 		return c.JSON(http.StatusNotFound, utils.NotFound())
-// 	}
-
-// 	return c.JSON(http.StatusOK, newArticleResponse(c, a))
-// }
+	return c.NoContent(http.StatusNoContent)
+}

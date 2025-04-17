@@ -13,8 +13,8 @@ FROM alpine:latest
 
 WORKDIR /app
 
-COPY --from=builder /build/view ./view
 COPY --from=builder /gorm-echo-crud /app/gorm-echo-crud
+
 
 EXPOSE 1323
 

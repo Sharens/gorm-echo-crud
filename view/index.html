@@ -1,17 +1,26 @@
 {{define "index.html"}}
 <!DOCTYPE html>
-<html lang="en">
+<html lang="pl">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>GORM Echo CRUD</title>
+    <title>Główna - CRUD Produktów</title>
+    <style>
+        body { font-family: sans-serif; padding: 20px; }
+        nav ul { list-style: none; padding: 0; }
+        nav li { margin-bottom: 10px; }
+        nav a { text-decoration: none; color: blue; }
+        nav a:hover { text-decoration: underline; }
+    </style>
 </head>
 <body>
-    <h1>Available Functionalities</h1>
-    <ul>
-        <li><a href="/products">List all products</a></li>
-        <li><a href="/products/create">Create a new product</a></li>
-    </ul>
+    <h1>Nawigacja</h1>
+    <nav>
+        <ul>
+            <li><a href="/test-ui">Interaktywny Interfejs Testowy CRUD</a></li>
+            <li><a href="/products" target="_blank">Lista produktów (API JSON)</a></li>
+        </ul>
+    </nav>
 </body>
 </html>
 {{end}}

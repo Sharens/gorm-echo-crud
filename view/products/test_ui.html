@@ -1,0 +1,257 @@
+{{define "test-ui.html"}}
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test API Produktów</title>
+    <style>
+        body { font-family: sans-serif; line-height: 1.6; padding: 20px; }
+        h1, h2 { border-bottom: 1px solid #ccc; padding-bottom: 5px; margin-top: 30px; }
+        .form-group { margin-bottom: 15px; }
+        label { display: block; margin-bottom: 5px; }
+        input[type="text"], input[type="number"] { padding: 8px; width: 250px; margin-right: 10px; }
+        button { padding: 8px 15px; cursor: pointer; }
+        pre { background-color: #f4f4f4; border: 1px solid #ddd; padding: 10px; white-space: pre-wrap; word-wrap: break-word; margin-top: 10px; min-height: 50px;}
+        .error { color: red; font-weight: bold; }
+        .success { color: green; font-weight: bold; }
+        nav { margin-bottom: 20px; }
+    </style>
+</head>
+<body>
+
+    <nav>
+        <a href="/">&laquo; Powrót do Menu</a>
+    </nav>
+
+    <h1>Test API Produktów (CRUD)</h1>
+
+    <div id="responseArea">
+        <h2>Odpowiedź API:</h2>
+        <pre id="apiResponse">Czekam na akcję...</pre>
+    </div>
+
+    <!-- Sekcja: Pobierz wszystkie produkty -->
+    <div>
+        <h2>Pobierz Wszystkie Produkty</h2>
+        <button id="getAllBtn">Pobierz Wszystkie</button>
+    </div>
+
+    <!-- Sekcja: Pobierz produkt po ID -->
+    <div>
+        <h2>Pobierz Produkt po ID</h2>
+        <div class="form-group">
+            <label for="getProdId">ID Produktu:</label>
+            <input type="number" id="getProdId" placeholder="Wpisz ID">
+            <button id="getByIdBtn">Pobierz</button>
+        </div>
+    </div>
+
+    <!-- Sekcja: Utwórz nowy produkt -->
+    <div>
+        <h2>Utwórz Nowy Produkt</h2>
+        <div class="form-group">
+            <label for="createName">Nazwa:</label>
+            <input type="text" id="createName" placeholder="Nazwa produktu">
+        </div>
+        <div class="form-group">
+            <label for="createPrice">Cena:</label>
+            <input type="number" step="0.01" id="createPrice" placeholder="Cena (np. 19.99)">
+        </div>
+        <button id="createBtn">Utwórz Produkt</button>
+    </div>
+
+    <!-- Sekcja: Zaktualizuj produkt -->
+    <div>
+        <h2>Zaktualizuj Produkt</h2>
+        <div class="form-group">
+            <label for="updateId">ID Produktu do Aktualizacji:</label>
+            <input type="number" id="updateId" placeholder="Wpisz ID">
+        </div>
+        <div class="form-group">
+            <label for="updateName">Nowa Nazwa:</label>
+            <input type="text" id="updateName" placeholder="Nowa nazwa produktu">
+        </div>
+        <div class="form-group">
+            <label for="updatePrice">Nowa Cena:</label>
+            <input type="number" step="0.01" id="updatePrice" placeholder="Nowa cena">
+        </div>
+        <button id="updateBtn">Zaktualizuj Produkt</button>
+    </div>
+
+    <!-- Sekcja: Usuń produkt -->
+    <div>
+        <h2>Usuń Produkt</h2>
+        <div class="form-group">
+            <label for="deleteId">ID Produktu do Usunięcia:</label>
+            <input type="number" id="deleteId" placeholder="Wpisz ID">
+            <button id="deleteBtn">Usuń Produkt</button>
+        </div>
+    </div>
+
+    <script>
+       
+        const apiUrl = '/products';
+        const responseElement = document.getElementById('apiResponse');
+
+       
+        function displayResponse(data, isError = false, isSuccess = false) {
+            responseElement.classList.remove('error', 'success');
+            if (isError) {
+                responseElement.classList.add('error');
+                responseElement.textContent = `Błąd: ${data}`;
+            } else if (isSuccess) {
+                 responseElement.classList.add('success');
+                 responseElement.textContent = data;
+            }
+             else {
+                try {
+                   
+                    if (data && (typeof data === 'object' || Array.isArray(data))) {
+                         responseElement.textContent = JSON.stringify(data, null, 2);
+                    } else if (data) {
+                         responseElement.textContent = data;
+                    } else {
+                         responseElement.textContent = "Otrzymano pustą odpowiedź.";
+                    }
+                } catch (e) {
+                    responseElement.textContent = data;
+                }
+            }
+        }
+
+       
+
+       
+        document.getElementById('getAllBtn').addEventListener('click', async () => {
+            responseElement.textContent = 'Pobieranie...';
+            try {
+                const response = await fetch(apiUrl);
+                if (!response.ok) throw new Error(`HTTP error! status: ${response.status} ${response.statusText}`);
+                const data = await response.json();
+                displayResponse(data);
+            } catch (error) {
+                displayResponse(error.message, true);
+            }
+        });
+
+       
+        document.getElementById('getByIdBtn').addEventListener('click', async () => {
+            const id = document.getElementById('getProdId').value;
+            if (!id) {
+                displayResponse("Proszę podać ID produktu.", true);
+                return;
+            }
+            responseElement.textContent = 'Pobieranie...';
+            try {
+                const response = await fetch(`${apiUrl}/${id}`);
+                 if (!response.ok) {
+                     if (response.status === 404) {
+                         throw new Error(`Produkt o ID ${id} nie znaleziony.`);
+                     }
+                     throw new Error(`HTTP error! status: ${response.status} ${response.statusText}`);
+                 }
+                const data = await response.json();
+                displayResponse(data);
+            } catch (error) {
+                displayResponse(error.message, true);
+            }
+        });
+
+       
+        document.getElementById('createBtn').addEventListener('click', async () => {
+            const name = document.getElementById('createName').value;
+            const price = document.getElementById('createPrice').value;
+
+            if (!name || !price || parseFloat(price) <= 0) {
+                displayResponse("Proszę podać poprawną nazwę i cenę (większą od 0).", true);
+                return;
+            }
+            responseElement.textContent = 'Tworzenie...';
+            try {
+                const response = await fetch(apiUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name: name, price: parseFloat(price) })
+                });
+                if (!response.ok) throw new Error(`HTTP error! status: ${response.status} ${response.statusText}`);
+                const data = await response.json();
+                displayResponse(data);
+                document.getElementById('createName').value = '';
+                document.getElementById('createPrice').value = '';
+            } catch (error) {
+                displayResponse(error.message, true);
+            }
+        });
+
+       
+        document.getElementById('updateBtn').addEventListener('click', async () => {
+            const id = document.getElementById('updateId').value;
+            const name = document.getElementById('updateName').value;
+            const price = document.getElementById('updatePrice').value;
+
+            if (!id) {
+                 displayResponse("Proszę podać ID produktu do aktualizacji.", true);
+                 return;
+            }
+             if (!name || !price || parseFloat(price) <= 0) {
+                 displayResponse("Proszę podać poprawną nową nazwę i cenę (większą od 0).", true);
+                 return;
+             }
+            responseElement.textContent = 'Aktualizowanie...';
+            try {
+                const response = await fetch(`${apiUrl}/${id}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name: name, price: parseFloat(price) })
+                });
+                 if (!response.ok) {
+                     if (response.status === 404) {
+                         throw new Error(`Produkt o ID ${id} nie znaleziony do aktualizacji.`);
+                     }
+                     throw new Error(`HTTP error! status: ${response.status} ${response.statusText}`);
+                 }
+                const data = await response.json();
+                displayResponse(data);
+                 document.getElementById('updateId').value = '';
+                 document.getElementById('updateName').value = '';
+                 document.getElementById('updatePrice').value = '';
+            } catch (error) {
+                displayResponse(error.message, true);
+            }
+        });
+
+       
+        document.getElementById('deleteBtn').addEventListener('click', async () => {
+            const id = document.getElementById('deleteId').value;
+             if (!id) {
+                 displayResponse("Proszę podać ID produktu do usunięcia.", true);
+                 return;
+             }
+
+            if (!confirm(`Czy na pewno chcesz usunąć produkt o ID ${id}?`)) {
+                return;
+            }
+            responseElement.textContent = 'Usuwanie...';
+            try {
+                const response = await fetch(`${apiUrl}/${id}`, {
+                    method: 'DELETE'
+                });
+                 if (!response.ok) {
+                     if (response.status === 404) {
+                         throw new Error(`Produkt o ID ${id} nie znaleziony do usunięcia.`);
+                     }
+                     throw new Error(`HTTP error! status: ${response.status} ${response.statusText}`);
+                 }
+                 displayResponse(`Produkt o ID ${id} został pomyślnie usunięty.`, false, true);
+                 document.getElementById('deleteId').value = '';
+            } catch (error) {
+                displayResponse(error.message, true);
+            }
+        });
+
+    </script>
+
+</body>
+</html>
+{{end}}
